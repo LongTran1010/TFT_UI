@@ -1,0 +1,62 @@
+#pragma once
+#include <Arduino.h>
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_ST7735.h>
+
+// RGB565 colors
+#define C_BLACK   0x0000
+#define C_WHITE   0xFFFF
+#define C_YELLOW  0xFFE0
+#define C_ORANGE  0xFD20
+#define C_GREEN   0x07E0
+#define C_RED     0xF800
+#define C_CYAN    0x07FF
+
+// Pin map cho ST7735 (mặc định VSPI)
+struct TFTPins {
+  int8_t cs   ;   // Chip Select
+  int8_t dc   ;  // Data/Command ---- A0
+  int8_t rst  ;  // Reset
+  int8_t sck  ;  // SPI SCK  (VSPI)
+  int8_t mosi ;  // SPI MOSI (VSPI) ---- SDA
+  int8_t miso ;  // Không dùng với ST7735
+  constexpr TFTPins(int8_t cs_=5, int8_t dc_=19, int8_t rst_=21,
+                    int8_t sck_=18, int8_t mosi_=23, int8_t miso_=-1)
+  : cs(cs_), dc(dc_), rst(rst_), sck(sck_), mosi(mosi_), miso(miso_) {}  
+};
+
+// Widget hiển thị “Khoảng cách (m)” + thanh mức
+class TFTDistance {
+public:
+  explicit TFTDistance(const TFTPins& pins = {}) //Constructor
+    : pins_(pins), //
+      tft_(pins.cs, pins.dc, pins.rst) {} //Hardware SPI, tham chiếu hằng
+
+  void begin();                                            // khởi tạo SPI + vẽ khung
+  void updateDistanceCm(uint16_t dist_cm, bool valid);     // cập nhật số đo (cm) + trạng thái hợp lệ
+
+  // Tùy chỉnh
+  void setMaxRangeMeters(float m);       // full-scale cho thanh mức (mặc định 30.0)
+  void setSmoothing(float alpha);        // hệ số EMA 0..1 (mặc định 0.25)
+  void setStaleTimeoutMs(uint32_t ms);   // timeout ms (mặc định 1000)
+
+private:
+
+  TFTPins pins_;
+  Adafruit_ST7735 tft_;
+
+  // trạng thái hiển thị, các mặc định
+  float    distEMA_m_      = NAN;     // giá trị đã làm mượt (m)
+  float    alpha_          = 0.25f;   // hệ số EMA
+  float    maxRange_m_     = 30.0f;   // thang hiển thị
+  uint32_t lastUpdateMs_   = 0, staleTimeoutMs_ = 1000;
+
+  // layout thanh mức
+  static constexpr int BAR_X = 2, BAR_Y = 34, BAR_W = 124, BAR_H = 8;
+
+  // helpers
+  void drawStatic();                                       // vẽ khung/nhãn 1 lần
+  void printDistanceValue(const String& s, uint16_t color);// in số lớn
+  void paintDistanceUI();                                  // vẽ số + thanh mức theo trạng thái hiện tại
+};
