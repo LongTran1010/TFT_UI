@@ -2,8 +2,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_ST7735.h>
-
+#include <Adafruit_ILI9341.h> //
 // RGB565 colors
 #define C_BLACK   0x0000
 #define C_WHITE   0xFFFF
@@ -13,20 +12,20 @@
 #define C_RED     0xF800
 #define C_CYAN    0x07FF
 
-// Pin map cho ST7735 (mặc định VSPI)
+//Pin map cho ILI9341 (mặc định VSPI)
 struct TFTPins {
   int8_t cs   ;   // Chip Select
   int8_t dc   ;  // Data/Command ---- A0
   int8_t rst  ;  // Reset
   int8_t sck  ;  // SPI SCK  (VSPI)
   int8_t mosi ;  // SPI MOSI (VSPI) ---- SDA
-  int8_t miso ;  // Không dùng với ST7735
+  int8_t miso ;  // Không dùng với ILI9341
   constexpr TFTPins(int8_t cs_=5, int8_t dc_=19, int8_t rst_=21,
                     int8_t sck_=18, int8_t mosi_=23, int8_t miso_=-1)
   : cs(cs_), dc(dc_), rst(rst_), sck(sck_), mosi(mosi_), miso(miso_) {}  
 };
 
-// Widget hiển thị “Khoảng cách (m)” + thanh mức
+//Widget hiển thị “Khoảng cách(m)” + thanh mức
 class TFTDistance {
 public:
   explicit TFTDistance(const TFTPins& pins = {}) //Constructor
@@ -44,16 +43,17 @@ public:
 private:
 
   TFTPins pins_;
-  Adafruit_ST7735 tft_;
+  Adafruit_ILI9341 tft_;
 
-  // trạng thái hiển thị, các mặc định
+  //trạng thái hiển thị, các mặc định
   float    distEMA_m_      = NAN;     // giá trị đã làm mượt (m)
   float    alpha_          = 0.25f;   // hệ số EMA
   float    maxRange_m_     = 30.0f;   // thang hiển thị
   uint32_t lastUpdateMs_   = 0, staleTimeoutMs_ = 1000;
 
-  // layout thanh mức
-  static constexpr int BAR_X = 2, BAR_Y = 34, BAR_W = 124, BAR_H = 8;
+  //layout động (tính theo width/height sau khi begin)
+  int BAR_X_, BAR_Y_, BAR_W_, BAR_H_;
+  int HEADER_H_ = 42, MARGIN_ = 10, GAP_ = 18;
 
   // helpers
   void drawStatic();                                       // vẽ khung/nhãn 1 lần

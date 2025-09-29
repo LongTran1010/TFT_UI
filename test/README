@@ -9,3 +9,14 @@ in the development cycle.
 
 More information about PlatformIO Unit Testing:
 - https://docs.platformio.org/en/latest/advanced/unit-testing/index.html
+/firmware/
+  src/
+    main.cpp
+    tf02_driver.h / .cpp
+    measurement.h
+    ui_tft.h / .cpp
+    utils_ringbuf.h
+  include/
+  platformio.ini (hoặc Arduino config)
+  docs/ (block diagram, TestPlan_v1.md)
+

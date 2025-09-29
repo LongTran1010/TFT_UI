@@ -3,27 +3,36 @@
 //Khởi tạo SPI vs panel TFT
 void TFTDistance::begin() {
   SPI.begin(pins_.sck, pins_.miso, pins_.mosi, pins_.cs); //remap
-  tft_.initR(INITR_BLACKTAB);           // nếu màu lệch thử GREENTAB/REDTAB
+  tft_.begin();         
+  tft_.setSPISpeed(27000000);
+  tft_.setRotation(1);
+  // Tính layout theo kích thước thực
+  int W = tft_.width();   // 320
+  int H = tft_.height();  // 240
+  BAR_X_ = MARGIN_;
+  BAR_W_ = W - 2*MARGIN_;
+  BAR_H_ = 12;
+  BAR_Y_ = HEADER_H_ + GAP_;
   drawStatic(); //vẽ khung label + thanh mức
 }
 
-// full-scale cho thanh mức (mặc định max 30.0)
+//full-scale cho thanh mức (mặc định max 30.0)
 void TFTDistance::setMaxRangeMeters(float m) {
   if (m < 1.0f) m = 1.0f; //chặn dưới 1m
   maxRange_m_ = m;
 }
 
-// Tracking 
+//Tracking 
 void TFTDistance::setSmoothing(float alpha) {
   if (alpha < 0.0f) alpha = 0.0f;
   if (alpha > 1.0f) alpha = 1.0f;
   alpha_ = alpha;
 }
 
-// Giới hạn thời gian dữ liệu cũ
+//Giới hạn thời gian dữ liệu cũ
 void TFTDistance::setStaleTimeoutMs(uint32_t ms) { staleTimeoutMs_ = ms; }
 
-// Cập nhật số đo (cm) -> (m) + trạng thái hợp lệ
+//Cập nhật số đo (cm) -> (m) + trạng thái hợp lệ
 void TFTDistance::updateDistanceCm(uint16_t dist_cm, bool valid) {
   if(valid){ //Nếu dữ liệu hợp lệ
     float m = dist_cm / 100.0f;
@@ -42,34 +51,49 @@ void TFTDistance::updateDistanceCm(uint16_t dist_cm, bool valid) {
 void TFTDistance::drawStatic() {
   tft_.fillScreen(C_BLACK); //clear
 
-  // Header
-  tft_.drawRect(0, 0, 128, 28, C_CYAN);
-  tft_.setCursor(4, 4);
+  //Header khung
+  tft_.drawRect(0,0,tft_.width(), HEADER_H_, C_CYAN);
+  //Dòng 1
+  const int TITLE_SIZE = 2;         // 16 px
+  const int TITLE_Y    = 6;
+  tft_.setCursor(MARGIN_ + 2, TITLE_Y);
   tft_.setTextColor(C_ORANGE, C_BLACK);
-  tft_.setTextSize(1);
-  tft_.print("DISTANCE(m)");
+  tft_.setTextSize(TITLE_SIZE);
+  tft_.print("KHOANG CACH(m)");
+  //Dòng 2
+  const int VALUE_SIZE = 3;         // 24 px
+  const int VALUE_Y    = TITLE_Y + TITLE_SIZE*8 + 4; // 6 + 16 + 4 = 26
+  const int VALUE_H    = VALUE_SIZE*8;               // 24 px
 
-  // Thanh mức
-  tft_.drawRect(BAR_X, BAR_Y, BAR_W, BAR_H, C_ORANGE);
+  tft_.fillRect(MARGIN_, VALUE_Y - 2, tft_.width() - 2*MARGIN_, VALUE_H + 6, C_BLACK);
+  //Thanh mức
+  tft_.drawRect(BAR_X_, BAR_Y_, BAR_W_, BAR_H_, C_ORANGE);
 
-  // Nhãn 0 & max
+  //Nhãn 0 & max ngay dưới bar
+  int labelY = BAR_Y_ + BAR_H_ + 12;
   tft_.setTextColor(C_WHITE, C_BLACK);
-  tft_.setTextSize(1);
-  tft_.setCursor(4, 48); tft_.print("0");
+  tft_.setTextSize(2);
+  tft_.setCursor(MARGIN_ + 2, labelY); tft_.print("0");
   String sMax = String((int)maxRange_m_);
-  tft_.setCursor(128 - (int)sMax.length()*6 - 2, 48); tft_.print(sMax);
+  int xr = tft_.width() - (int)sMax.length()*12 - (MARGIN_+2);
+  tft_.setCursor(xr, labelY); tft_.print(sMax);
 
-  // Clear vùng số lần đầu
-  tft_.fillRect(2, 14, 124, 12, C_BLACK);
+  //clear vùng số trong header
+  //tft_.fillRect(MARGIN_, 8 + (HEADER_H_ - 30)/2, tft_.width()-2*MARGIN_, 36, C_BLACK);
 }
 
 //In số lớn
 void TFTDistance::printDistanceValue(const String& s, uint16_t color) {
-  tft_.fillRect(2, 14, 124, 12, C_BLACK);     // xóa số cũ
+  const int TITLE_SIZE = 2;
+  const int TITLE_Y    = 6;
+  const int VALUE_SIZE = 3;
+  const int VALUE_Y    = TITLE_Y + TITLE_SIZE*8 + 4; //ngay dưới tiêu đề
+  const int VALUE_H    = VALUE_SIZE*8;
+  tft_.fillRect(MARGIN_, VALUE_Y - 2, tft_.width() - 2*MARGIN_, VALUE_H+6, C_BLACK);
+//tft_.fillRect(MARGIN_, 8 + (HEADER_H_ - 30)/2, tft_.width()-2*MARGIN_, 36, C_BLACK);     // xóa số cũ
   tft_.setTextColor(color, C_BLACK);
-  tft_.setTextSize(2);
-  int x = (s.length() <= 5) ? 20 : 4;         // canh tương đối
-  tft_.setCursor(x, 12);
+  tft_.setTextSize(VALUE_SIZE);
+  tft_.setCursor(MARGIN_ + 8, VALUE_Y );
   tft_.print(s);
 }
 
@@ -79,8 +103,8 @@ void TFTDistance::paintDistanceUI() {
 
   if (isnan(distEMA_m_) || stale) {
     printDistanceValue(String("---.- m"), C_RED);
-    tft_.fillRect(BAR_X+1, BAR_Y+1, BAR_W-2, BAR_H-2, C_BLACK);
-    tft_.drawRect(BAR_X, BAR_Y, BAR_W, BAR_H, C_ORANGE);
+    tft_.fillRect(BAR_X_+1, BAR_Y_+1, BAR_W_-2, BAR_H_-2, C_BLACK);
+    tft_.drawRect(BAR_X_, BAR_Y_, BAR_W_, BAR_H_, C_ORANGE);
     return;
   }
 
@@ -89,9 +113,9 @@ void TFTDistance::paintDistanceUI() {
 
   float r = distEMA_m_ / maxRange_m_;
   if (r < 0) r = 0; if (r > 1) r = 1;
-  int fillW = (int)(r * (BAR_W - 2));
+  int fillW = (int)(r * (BAR_W_ - 2));
 
-  tft_.fillRect(BAR_X+1, BAR_Y+1, BAR_W-2, BAR_H-2, C_BLACK);
-  tft_.fillRect(BAR_X+1, BAR_Y+1, fillW,      BAR_H-2, C_GREEN);
-  tft_.drawRect(BAR_X, BAR_Y, BAR_W, BAR_H, (distEMA_m_ >= maxRange_m_) ? C_RED : C_ORANGE);
+  tft_.fillRect(BAR_X_+1, BAR_Y_+1, BAR_W_-2, BAR_H_-2, C_BLACK);
+  tft_.fillRect(BAR_X_+1, BAR_Y_+1, fillW,      BAR_H_-2, C_GREEN);
+  tft_.drawRect(BAR_X_, BAR_Y_, BAR_W_, BAR_H_, (distEMA_m_ >= maxRange_m_) ? C_RED : C_ORANGE);
 }
