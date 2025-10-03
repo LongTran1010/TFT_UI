@@ -2,7 +2,8 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_ILI9341.h> //
+#include <Adafruit_ILI9341.h> 
+#include <MeasurementTypes.h>
 // RGB565 colors
 #define C_BLACK   0x0000
 #define C_WHITE   0xFFFF
@@ -40,6 +41,9 @@ public:
   void setSmoothing(float alpha);        // hệ số EMA 0..1 (mặc định 0.25)
   void setStaleTimeoutMs(uint32_t ms);   // timeout ms (mặc định 1000)
 
+  void setStatus(MeasStatus s);                 // vẽ/ghi nhớ trạng thái
+  void setFPS(float fps);                       // vẽ/ghi nhớ FPS
+  void update(const Measurement& m, float fps); // tiện ích gộp
 private:
 
   TFTPins pins_;
@@ -50,7 +54,9 @@ private:
   float    alpha_          = 0.25f;   // hệ số EMA
   float    maxRange_m_     = 30.0f;   // thang hiển thị
   uint32_t lastUpdateMs_   = 0, staleTimeoutMs_ = 1000;
-
+  //mới
+  float     fps_           = 0.0f;
+  MeasStatus status_       = MEAS_TIMEOUT;
   //layout động (tính theo width/height sau khi begin)
   int BAR_X_, BAR_Y_, BAR_W_, BAR_H_;
   int HEADER_H_ = 42, MARGIN_ = 10, GAP_ = 18;
@@ -59,4 +65,5 @@ private:
   void drawStatic();                                       // vẽ khung/nhãn 1 lần
   void printDistanceValue(const String& s, uint16_t color);// in số lớn
   void paintDistanceUI();                                  // vẽ số + thanh mức theo trạng thái hiện tại
+  void drawOverlay(); //FPS + trạng thái
 };

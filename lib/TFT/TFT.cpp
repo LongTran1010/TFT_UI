@@ -1,5 +1,7 @@
 #include "TFT.h"
 
+//------ Khởi tạo và cấu hình TFT -------
+
 //Khởi tạo SPI vs panel TFT
 void TFTDistance::begin() {
   SPI.begin(pins_.sck, pins_.miso, pins_.mosi, pins_.cs); //remap
@@ -14,6 +16,7 @@ void TFTDistance::begin() {
   BAR_H_ = 12;
   BAR_Y_ = HEADER_H_ + GAP_;
   drawStatic(); //vẽ khung label + thanh mức
+  drawOverlay(); //vẽ overlay trạng thái
 }
 
 //full-scale cho thanh mức (mặc định max 30.0)
@@ -43,7 +46,27 @@ void TFTDistance::updateDistanceCm(uint16_t dist_cm, bool valid) {
     }
     lastUpdateMs_ = millis();
   }
-  paintDistanceUI();
+  paintDistanceUI(); //Vẽ số + thanh mức
+  drawOverlay(); // Update cho header về FPS và status
+}
+
+void TFTDistance::setStatus(MeasStatus s) {
+  status_ = s;
+  drawOverlay();
+}
+
+void TFTDistance::setFPS(float fps) {
+  fps_ = fps;
+  drawOverlay();
+}
+
+void TFTDistance::update(const Measurement& m, float fps) {
+  setStatus(m.status);
+  setFPS(fps);
+  // hợp lệ khi MEAS_OK; còn lại coi như invalid để UI hiện ---.- m
+  bool valid = (m.status == MEAS_OK);
+  uint16_t cm = (uint16_t)(m.dist_m * 100.0f);
+  updateDistanceCm(cm, valid);
 }
 
 // ---------------- UI ----------------
@@ -118,4 +141,42 @@ void TFTDistance::paintDistanceUI() {
   tft_.fillRect(BAR_X_+1, BAR_Y_+1, BAR_W_-2, BAR_H_-2, C_BLACK);
   tft_.fillRect(BAR_X_+1, BAR_Y_+1, fillW,      BAR_H_-2, C_GREEN);
   tft_.drawRect(BAR_X_, BAR_Y_, BAR_W_, BAR_H_, (distEMA_m_ >= maxRange_m_) ? C_RED : C_ORANGE);
+}
+
+// Overlay: hiện FPS + Status trong header (góc phải)
+void TFTDistance::drawOverlay() {
+  // Khu vực nhỏ bên phải header
+  const int OVER_SIZE = 1;    // chữ nhỏ
+  const int TITLE_Y   = 6;
+  int rightBlockW = 130;
+  int xRight = tft_.width() - rightBlockW - MARGIN_;
+  int yTop   = TITLE_Y - 2;
+
+  // Xoá 2 dòng overlay
+  tft_.fillRect(xRight, yTop,            rightBlockW, 14, C_BLACK);
+  tft_.fillRect(xRight, yTop + 14,       rightBlockW, 14, C_BLACK);
+
+  // FPS (dòng trên)
+  tft_.setTextSize(OVER_SIZE);
+  tft_.setTextColor(C_CYAN, C_BLACK);
+  tft_.setCursor(xRight, yTop);
+  tft_.print("FPS: ");
+  tft_.print(fps_, 1);
+
+  // Map trạng thái -> text & màu
+  uint16_t sc = C_WHITE;
+  const char* sTxt = "OK";
+  switch (status_) {
+    case MEAS_OK:        sc = C_WHITE;  sTxt = "OK";        break;
+    case MEAS_TIMEOUT:   sc = C_YELLOW; sTxt = "TIMEOUT";   break;
+    case MEAS_BAD_CRC:   sc = C_RED;    sTxt = "BAD_CRC";   break;
+    case MEAS_BAD_FRAME: sc = C_RED;    sTxt = "BAD_FRM";   break;
+    case MEAS_NO_SIGNAL: sc = 0x8410;   sTxt = "NO_SIG";    break; // xám
+  }
+
+  // Status (dòng dưới)
+  tft_.setTextColor(sc, C_BLACK);
+  tft_.setCursor(xRight, yTop + 14);
+  tft_.print("STAT: ");
+  tft_.print(sTxt);
 }
