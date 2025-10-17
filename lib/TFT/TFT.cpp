@@ -39,10 +39,18 @@ void TFTDistance::setStaleTimeoutMs(uint32_t ms) { staleTimeoutMs_ = ms; }
 void TFTDistance::updateDistanceCm(uint16_t dist_cm, bool valid) {
   if(valid){ //Nếu dữ liệu hợp lệ
     float m = dist_cm / 100.0f;
+    buff_[idx_] = m;
+    if(length_ < 5) length_++;
+    idx_ = (idx_ + 1) % 5;
+
+    // Lấy median từ buffer
+    float med = (length_ < 5) ? m : median5();
+    // Áp dụng EMA trên median
     if(isnan(distEMA_m_)){
-        distEMA_m_ = m;
+        distEMA_m_ = med;
     }else{                   
-        distEMA_m_ = alpha_ * m + (1.0f - alpha_) * distEMA_m_;
+        distEMA_m_ = alpha_ * med
+         + (1.0f - alpha_) * distEMA_m_;
     }
     lastUpdateMs_ = millis();
   }

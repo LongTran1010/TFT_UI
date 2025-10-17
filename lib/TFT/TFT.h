@@ -44,6 +44,8 @@ public:
   void setStatus(MeasStatus s);                 // vẽ/ghi nhớ trạng thái
   void setFPS(float fps);                       // vẽ/ghi nhớ FPS
   void update(const Measurement& m, float fps); // tiện ích gộp
+  //update 17/10/2025
+  float getFilter() const { return distEMA_m_; }    // lấy hệ số EMA hiện tại
 private:
 
   TFTPins pins_;
@@ -60,7 +62,24 @@ private:
   //layout động (tính theo width/height sau khi begin)
   int BAR_X_, BAR_Y_, BAR_W_, BAR_H_;
   int HEADER_H_ = 42, MARGIN_ = 10, GAP_ = 18;
-
+  //update 17/10/2025
+  //Thêm median lọc nhiễu xung quanh EMA
+  float buff_[5]; uint8_t length_ = 0, idx_ = 0;
+  float median5() const {
+    //sort (insertion sort) 
+    float a[5];
+    for (int i = 0; i < 5; i++) a[i] = buff_[i];
+    for (int i = 1; i < 5; i++) {
+      float k = a[i];
+      int j = i - 1;
+      while (j >= 0 && a[j] > k) {
+        a[j + 1] = a[j];
+        j--;
+      }
+      a[j + 1] = k;
+    }
+    return a[2];
+  }
   // helpers
   void drawStatic();                                       // vẽ khung/nhãn 1 lần
   void printDistanceValue(const String& s, uint16_t color);// in số lớn
