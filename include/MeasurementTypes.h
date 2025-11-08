@@ -16,3 +16,4 @@ struct Measurement {
   float    temp_C;      // nhiệt độ (nếu không có thì NAN)
   MeasStatus status;    // trạng thái mẫu
 };
+constexpr float TC22_BLIND_M = 3.0f;

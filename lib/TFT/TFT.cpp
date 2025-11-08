@@ -19,9 +19,9 @@ void TFTDistance::begin() {
   drawOverlay(); //vẽ overlay trạng thái
 }
 
-//full-scale cho thanh mức (mặc định max 30.0)
+//full-scale cho thanh mức (mặc định max 800.0)
 void TFTDistance::setMaxRangeMeters(float m) {
-  if (m < 1.0f) m = 1.0f; //chặn dưới 1m
+  if (m < 3.0f) m = 3.0f; //chặn dưới 3m
   maxRange_m_ = m;
 }
 
@@ -36,11 +36,11 @@ void TFTDistance::setSmoothing(float alpha) {
 void TFTDistance::setStaleTimeoutMs(uint32_t ms) { staleTimeoutMs_ = ms; }
 
 //Cập nhật số đo (cm) -> (m) + trạng thái hợp lệ
-void TFTDistance::updateDistanceCm(uint16_t dist_cm, bool valid) {
+void TFTDistance::updateDistanceMeters(float m, bool valid) {
+  if (valid && m < TC22_BLIND_M) valid = false;
   if(valid){ //Nếu dữ liệu hợp lệ
-    float m = dist_cm / 100.0f;
-    buff_[idx_] = m;
     if(length_ < 5) length_++;
+    buff_[idx_] = m;
     idx_ = (idx_ + 1) % 5;
 
     // Lấy median từ buffer
@@ -73,8 +73,7 @@ void TFTDistance::update(const Measurement& m, float fps) {
   setFPS(fps);
   // hợp lệ khi MEAS_OK; còn lại coi như invalid để UI hiện ---.- m
   bool valid = (m.status == MEAS_OK);
-  uint16_t cm = (uint16_t)(m.dist_m * 100.0f);
-  updateDistanceCm(cm, valid);
+  updateDistanceMeters(m.dist_m, valid);
 }
 
 // ---------------- UI ----------------

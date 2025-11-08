@@ -34,8 +34,15 @@ public:
       tft_(pins.cs, pins.dc, pins.rst) {} //Hardware SPI, tham chiếu hằng
 
   void begin();                                            // khởi tạo SPI + vẽ khung
-  void updateDistanceCm(uint16_t dist_cm, bool valid);     // cập nhật số đo (cm) + trạng thái hợp lệ
+  void updateDistanceCm(uint16_t dist_cm, bool valid){
+    updateDistanceMeters(dist_cm / 100.0f, valid);
+  };     // cập nhật số đo (cm) + trạng thái hợp lệ
 
+  //update 24/10
+  void updateDistanceMeters(float dist_m, bool valid);     // cập nhật số đo (m) + trạng thái hợp lệ
+  void updateDistanceDm(uint16_t dist_dm, bool valid) {      // TC22
+    updateDistanceMeters(dist_dm / 10.0f, valid);
+  }
   // Tùy chỉnh
   void setMaxRangeMeters(float m);       // full-scale cho thanh mức (mặc định 30.0)
   void setSmoothing(float alpha);        // hệ số EMA 0..1 (mặc định 0.25)
@@ -54,7 +61,7 @@ private:
   //trạng thái hiển thị, các mặc định
   float    distEMA_m_      = NAN;     // giá trị đã làm mượt (m)
   float    alpha_          = 0.25f;   // hệ số EMA
-  float    maxRange_m_     = 30.0f;   // thang hiển thị
+  float    maxRange_m_     = 800.0f;   // thang hiển thị
   uint32_t lastUpdateMs_   = 0, staleTimeoutMs_ = 1000;
   //mới
   float     fps_           = 0.0f;

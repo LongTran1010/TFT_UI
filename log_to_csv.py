@@ -4,7 +4,7 @@ from datetime import datetime
 
 # === Cấu hình cổng COM ===
 # Kiểm tra COM nào ESP32 đang kết nối (xem góc phải dưới PlatformIO: COM3, COM4, ...)
-PORT = "COM3"      # đổi theo cổng của bạn
+PORT = "COM4"      # đổi theo cổng của bạn
 BAUD = 115200      # tốc độ Serial
 
 # === Tên file CSV (tự tạo theo thời gian) ===

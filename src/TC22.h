@@ -24,11 +24,13 @@ public:
 
   void setTimeoutMs(uint32_t ms) { timeoutMs_ = ms; }
   void setBoardId(uint8_t id)    { brdId_ = id; }   // mặc định 0xFF
+  void setLittleEndianPayload(bool le) { littleEndian_ = le; }
 
   // ---- Control helpers (non-blocking send) ----
   void startContinuous() { sendStartStop(/*start=*/true, /*times=*/0); }
   void startSingle()     { sendStartStop(/*start=*/true, /*times=*/1); }
   void stop()            { sendStartStop(/*start=*/false,/*times=*/0); }
+
 
   // Non-blocking; call often in loop().
   // Returns true when a measurement frame (valid or invalid) was parsed.
@@ -37,11 +39,19 @@ public:
       uint8_t b = port_.read();
       switch (st_) {
         case 0: // chờ 0xFB
-          if (b == 0xFB) { buf_[0] = b; st_ = 1; t0_ = millis(); }
+          if (b == 0xFB) { buf_[0] = b; st_ = 1; t0_ = millis(); Serial.printf("Start RX,%lu\n", (unsigned long)t0_);}
           break;
         case 1: // chờ 0x03
           if (b == 0x03) { buf_[1] = b; idx_ = 2; st_ = 2; }
-          else { st_ = 0; }
+          else { 
+            st_ = 0; 
+            out.t_ms     = millis();
+            out.dist_m   = NAN;
+            out.strength = 0;
+            //out.temp_C   = NAN;
+            out.status   = MEAS_BAD_FRAME; //báo sai khung
+            return true; // phát lỗi
+          }
           break;
         case 2: // nhận 7 byte còn lại
           buf_[idx_++] = b;
@@ -49,24 +59,36 @@ public:
             st_ = 0; idx_ = 0;
             // CRC check
             uint8_t crc = sum8(buf_, 8);
-            if (crc != buf_[8]) return false; // BAD_CRC - không trả mẫu ra, cứ bỏ qua khung
-
+            if (crc != buf_[8]) {
+            //return false; // BAD_CRC (đổi thành trả mẫu lỗi) 
+              out.t_ms     = millis();
+              out.dist_m   = NAN;
+              out.strength = 0;
+              out.temp_C   = NAN;
+              out.status   = MEAS_BAD_CRC;
+              return true;
+            }
             const uint8_t brdId = buf_[2];                (void)brdId;
             const uint8_t payLen= buf_[3];                (void)payLen; // nên là 0x04
-            uint16_t valid =  uint16_t(buf_[4]) | (uint16_t(buf_[5]) << 8);
-            uint16_t dist_dm = uint16_t(buf_[6]) | (uint16_t(buf_[7]) << 8);
-
+            //uint16_t valid =  uint16_t(buf_[4]) | (uint16_t(buf_[5]) << 8);
+            //uint16_t dist_dm = uint16_t(buf_[6]) | (uint16_t(buf_[7]) << 8);
+            uint16_t valid, dist_dm;
+            if (littleEndian_) {
+              valid =  uint16_t(buf_[4]) | (uint16_t(buf_[5]) << 8);
+              dist_dm = uint16_t(buf_[6]) | (uint16_t(buf_[7]) << 8);
+            } else {
+              valid =  (uint16_t(buf_[5]) << 0) | (uint16_t(buf_[4]) << 8);
+              dist_dm =  (uint16_t(buf_[7]) << 0) | (uint16_t(buf_[6]) << 8);
+            }
             out.t_ms     = millis();
-            out.dist_m   = dist_dm / 10.0f; // dm -> m
+            const float m   = dist_dm / 10.0f; // dm -> m
+            out.dist_m   = m;
             out.strength = 0;               // TC22 k trả strength
             out.temp_C   = NAN;             // TC22 k trả temperature
 
-            if (valid == 1 && dist_dm > 0) {
-              out.status = MEAS_OK;
-            } else {
-              out.status = MEAS_NO_SIGNAL; // invalid data or out of range
-            }
+            out.status = (valid == 1 && m >= TC22_BLIND_M) ? MEAS_OK : MEAS_NO_SIGNAL;
             return true;
+            
           }
           break;
       }
@@ -83,6 +105,7 @@ public:
   void resetParser() { st_ = 0; idx_ = 0; t0_ = millis(); }
 
 private:
+  bool littleEndian_ = true;
   // send start/stop command
   void sendStartStop(bool start, uint16_t times) {
     uint8_t pkt[9];
