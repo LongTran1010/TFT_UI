@@ -1,3 +1,6 @@
 {
-    "cmake.sourceDirectory": "D:/Thesis-GD1/TFT/lib/ArduinoJson/src"
+    "cmake.sourceDirectory": "D:/Thesis-GD1/TFT/lib/ArduinoJson/src",
+    "files.associations": {
+        "string_view": "cpp"
+    }
 }

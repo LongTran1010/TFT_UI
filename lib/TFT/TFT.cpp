@@ -15,6 +15,8 @@ void TFTDistance::begin() {
   BAR_W_ = W - 2*MARGIN_;
   BAR_H_ = 12;
   BAR_Y_ = HEADER_H_ + GAP_;
+  wifiSSID_ = "";
+  wifiConnected_ = false;
   drawStatic(); //vẽ khung label + thanh mức
   drawOverlay(); //vẽ overlay trạng thái
 }
@@ -74,10 +76,17 @@ void TFTDistance::update(const Measurement& m, float fps) {
   // hợp lệ khi MEAS_OK; còn lại coi như invalid để UI hiện ---.- m
   bool valid = (m.status == MEAS_OK);
   updateDistanceMeters(m.dist_m, valid);
+  DrawWiFiStatus();
 }
 
 // ---------------- UI ----------------
-
+// update 14/11/2025
+void TFTDistance::setWiFiStatus(const char* SSID, bool connected) {
+  wifiSSID_ = String(SSID ? SSID : "");
+  wifiConnected_ = connected;
+    // vẽ lại status mỗi lần thay đổi
+  DrawWiFiStatus();
+}
 void TFTDistance::drawStatic() {
   tft_.fillScreen(C_BLACK); //clear
 
@@ -186,4 +195,33 @@ void TFTDistance::drawOverlay() {
   tft_.setCursor(xRight, yTop + 14);
   tft_.print("STAT: ");
   tft_.print(sTxt);
+}
+void TFTDistance::DrawWiFiStatus() {
+  // Khoảng vùng nhỏ ở góc trên để hiển thị WiFi
+  const int16_t x = 2;
+  const int16_t y = 2;
+  const int16_t w = 200;   // rộng bao nhiêu tuỳ độ phân giải
+  const int16_t h = 12;    // cao ~1 dòng chữ size 1
+
+  // Xoá vùng cũ
+  tft_.fillRect(x, y, w, h, ILI9341_BLACK);
+
+  tft_.setCursor(x, y);
+  tft_.setTextSize(1);
+
+  if (wifiSSID_.length() == 0) {
+        // chưa có SSID thì không vẽ gì thêm
+        return;
+    }
+
+    if (wifiConnected_) {
+        tft_.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+        tft_.print("WiFi: ");
+        tft_.print(wifiSSID_);
+    } else {
+        tft_.setTextColor(ILI9341_RED, ILI9341_BLACK);
+        tft_.print("WiFi: ");
+        tft_.print(wifiSSID_);
+        tft_.print(" ERR");
+    }
 }

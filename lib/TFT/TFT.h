@@ -1,4 +1,5 @@
 #pragma once
+#include "Password.h"
 #include <Arduino.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
@@ -21,7 +22,7 @@ struct TFTPins {
   int8_t sck  ;  // SPI SCK  (VSPI)
   int8_t mosi ;  // SPI MOSI (VSPI) ---- SDA
   int8_t miso ;  // Không dùng với ILI9341
-  constexpr TFTPins(int8_t cs_=5, int8_t dc_=19, int8_t rst_=21,
+  constexpr TFTPins(int8_t cs_=5, int8_t dc_=21, int8_t rst_=19,
                     int8_t sck_=18, int8_t mosi_=23, int8_t miso_=-1)
   : cs(cs_), dc(dc_), rst(rst_), sck(sck_), mosi(mosi_), miso(miso_) {}  
 };
@@ -53,6 +54,8 @@ public:
   void update(const Measurement& m, float fps); // tiện ích gộp
   //update 17/10/2025
   float getFilter() const { return distEMA_m_; }    // lấy hệ số EMA hiện tại
+  //update 14/11/2025
+  void setWiFiStatus(const char* SSID, bool connected); // hiển thị trạng thái WiFi
 private:
 
   TFTPins pins_;
@@ -87,6 +90,10 @@ private:
     }
     return a[2];
   }
+  //update 14/11/2025
+  String wifiSSID_ = "";
+  bool wifiConnected_ = false;
+  void DrawWiFiStatus(); // vẽ trạng thái WiFi
   // helpers
   void drawStatic();                                       // vẽ khung/nhãn 1 lần
   void printDistanceValue(const String& s, uint16_t color);// in số lớn
