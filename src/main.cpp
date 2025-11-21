@@ -5,16 +5,19 @@
 #include "MeasurementTypes.h"  // MeasStatus, Measurement
 //#include "TF02-Pro.h"        // TF02ProDriver
 #include "TC22.h"          // TC22Driver
+#include <esp_task_wdt.h>
+
 #define TRIGGER_PIN 25
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-//const char* mqtt_server = "192.168.90.50";
-const char* mqtt_server = "172.20.10.3";
+const char* mqtt_server = "192.168.90.50";
+//const char* mqtt_server = "172.20.10.3";
 const int mqtt_port = 1883;
 const char* mqtt_topic_sub = "thesis/tc22/log";
 const char* mqtt_topic_status = "thesis/tc22/status";
+
 //button
 static bool btnWasLow = false;
 static uint32_t btnTs = 0;
@@ -33,6 +36,17 @@ float lockedValue = 0;
 // TFT
 TFTPins pins{5,21,19,18,23,-1};  // CS=5, DC=21, RST=19, SCK=18, MOSI=23, MISO=-1
 TFTDistance display(pins);
+
+static uint32_t tc22LastFrameMs = 0; // thời gian nhận mẫu TC22 cuối cùng
+static uint32_t tc22LastOkMs      = 0;   // lần cuối nhận MEAS_OK
+static uint32_t tc22LastRestartMs = 0;   // lần cuối thử restart
+static uint8_t  tc22RestartCount  = 0;   // số lần restart đã thử từ lúc bật máy
+
+// Ngưỡng thời gian 
+constexpr uint32_t TC22_FRAME_TIMEOUT_MS   = 1000;   // 1s không có frame -> coi là TIMEOUT
+constexpr uint32_t TC22_OK_TIMEOUT_MS      = 3000;  // 3s không có MEAS_OK -> coi là mất mục tiêu / sensor có vấn đề
+constexpr uint32_t TC22_RESTART_INTERVAL_MS = 5000; // 5s không frame -> thử restart
+constexpr uint8_t  TC22_MAX_RESTARTS        = 3;    // thử tối đa 3 lần rồi bỏ
 
 #if defined(USE_TC22)
 // TC22trên UART2 (ESP32): RX2=16, TX2=17
@@ -64,13 +78,16 @@ void connectWiFi() {
   }
   Serial.println("\nWiFi connected!");
   display.setWiFiStatus(WIFI_SSID, true);
+  display.setSystemError(0); //Xóa lỗi WiFi nếu có
 }
 
 void reconnectMQTT() {
+  client.setServer(mqtt_server, mqtt_port);
   while (!client.connected()) {
     if(WiFi.status() != WL_CONNECTED){
       Serial.println("Wi-Fi lost, reconnecting...");
       display.setWiFiStatus(WIFI_SSID, false);
+      display.setSystemError(20); //Lỗi WiFi
       connectWiFi();
     }
     Serial.print("Connecting to MQTT...");
@@ -79,10 +96,12 @@ void reconnectMQTT() {
       client.subscribe(mqtt_topic_status);
       Serial.println("[MQTT] Subscribed to topic: " + String(mqtt_topic_status)); 
       client.publish(mqtt_topic_status, "TC22 logger online");
+      display.setSystemError(0); //wifi + MQTT OK
     }else{
       Serial.print("Failed, rc=");
       Serial.print(client.state());
       Serial.println(" retrying in 5s...");
+      display.setSystemError(21); //Lỗi MQTT
       vTaskDelay(pdMS_TO_TICKS(5000));
     }
   }
@@ -121,7 +140,7 @@ void setup() {
   pinMode(TRIGGER_PIN, INPUT_PULLUP);
   // TFT UI
   display.begin();
-  display.setMaxRangeMeters(800.0f); //Max range 700m
+  display.setMaxRangeMeters(800.0f); //Max range 800m
   display.setSmoothing(0.25f); // Set EMA ở 0.25
   display.setStaleTimeoutMs(1000);
   
@@ -137,66 +156,61 @@ void setup() {
 // #endif
 // }
 
-#if defined(USE_TC22)
+  #if defined(USE_TC22)
   // TC22
-  lrf.begin(115200);          // cấu hình UART + reset parser
-  delay(50);     // timeout khung dở
-  lrf.setLittleEndianPayload(true); 
-  lrf.startContinuous();     // ngưỡng tín hiệu yếu
-#endif
+    lrf.begin(115200);          // cấu hình UART + reset parser
+    delay(500);     // timeout khung dở
+    lrf.setLittleEndianPayload(true); 
+    lrf.startContinuous();     // ngưỡng tín hiệu yếu
+    uint32_t now = millis();
+    tc22LastFrameMs = now;
+    tc22LastOkMs = now;
+    tc22LastRestartMs = now;
+    tc22RestartCount = 0;
+  #endif
+  esp_task_wdt_init(5, true); // timeout 5s, reset chip nếu treo
+  esp_task_wdt_add(NULL);   // thêm task chính vào giám sát
 }
 
 void loop(){
-  if (!client.connected()) {
+  esp_task_wdt_reset(); // đặt lại đồng hồ giám sát
+  static uint32_t lastMQTTCheck = 0;
+  if (!client.connected() && millis() - lastMQTTCheck > 5000) {
+    lastMQTTCheck = millis();
     reconnectMQTT();
   }
   client.loop();
-// #if defined(USE_TF02_PRO)
-//   static uint32_t lastAny = millis(); // để báo TIMEOUT khi lâu không có mẫu
-
-//   Measurement m;
-//   if (lrf.poll(m)) {
-//     lastAny = millis();
-
-//     if (m.status == MEAS_OK) {
-//       float fps = computeFPS();
-//       display.update(m, fps);           // cập nhật số đo + overlay FPS/Status
-//     } else {
-//       // Không đưa mẫu lỗi vào EMA; chỉ cập nhật overlay
-//       display.setStatus(m.status);
-//       display.setFPS(0.0f);
-//     }
-//   } else {
-//     // Không nhận được mẫu hoàn chỉnh trong một khoảng ngắn -> overlay TIMEOUT
-//     if (millis() - lastAny > 300) {
-//       display.setStatus(MEAS_TIMEOUT);
-//       display.setFPS(0.0f);
-//       // Vùng số sẽ tự về "---.- m" khi stale > 1000 ms (đã cấu hình)
-//     }
-//   }
 #if defined(USE_TC22)
   if (!targetlocked && !singleShot && btnFalling()) {
     singleShot = true;
     lrf.startSingle();  // Gửi lệnh đo một lần
   }
-  static uint32_t lastAny = millis();
+  static uint32_t lastFPSUpdateMs = millis();
+  uint32_t now = millis();
+
   Measurement m;
-  if(lrf.poll(m)){
-    lastAny = millis();
+  bool haveFrame = lrf.poll(m);
+  if(haveFrame){
+    tc22LastFrameMs = now;
     if(m.status == MEAS_OK) {
+      tc22LastOkMs = millis();
+      tc22RestartCount = 0; // Khi có mẫu OK thì TC22 ổn định, reset bộ đếm khởi động lại
       if(singleShot && !targetlocked) {
         targetlocked = true;
         lockedTime = millis() + 4000; // Giữ 4 giây
         lockedValue = m.dist_m;
         singleShot = false;
+
         display.updateDistanceMeters(lockedValue, true); //Trả về giá trị khóa ngay lập tức
         display.setStatus(MEAS_OK);
         display.setFPS(0.0f);
       }else if(!targetlocked) {
-        // Gi
+        //Đo liên tục
         float fps = computeFPS();
+
         Serial.printf("Start parse frame,%lu\n", (unsigned long)m.t_ms); //Điểm bắt đầu tính độ trễ end--to-end (in trước khi lọc)
         display.update(m, fps);           // cập nhật số đo + overlay FPS/Status
+
         float ema = display.getFilter();
         Serial.printf("%lu,%.3f,%.3f,%u,%.1f\n",
           (unsigned long)m.t_ms, 
@@ -204,6 +218,7 @@ void loop(){
           ema, 
           -1, //ko trả strength
           fps);
+
         publishMeasurementMQTT(m, ema, fps); //update 14/11/2025
         Serial.printf("render TFT,%lu\n", (unsigned long)millis()); //Điểm kết thúc tính độ trễ end--to-end (in ngay sau khi vẽ xong TFT)
       } 
@@ -212,18 +227,51 @@ void loop(){
       display.setStatus(m.status);
       display.setFPS(0.0f);
     }
+  }else{
+    if(!targetlocked && (now - tc22LastFrameMs > TC22_FRAME_TIMEOUT_MS)){
+      display.setStatus(MEAS_TIMEOUT);
+      display.setFPS(0.0f);
+      // Vùng số sẽ tự về "---.- m" khi stale > 1000 ms (đã cấu hình)
+      display.updateDistanceMeters(NAN, false);
+    }
   }
   if(targetlocked) {
     //Vẽ lại giá trị đã khóa để tránh bị stale
     display.updateDistanceMeters(lockedValue, true);
     display.setStatus(MEAS_OK);
     display.setFPS(0.0f);
-    if(millis() > lockedTime || btnFalling()) {
+    if(now > lockedTime || btnFalling()) {
       targetlocked = false; // Hết thời gian khóa hoặc nhấn nút lần nữa
       lrf.startContinuous(); // Quay lại chế độ liên tục
       // Vùng số sẽ tự về "---.- m" khi stale > 1000 ms (đã cấu hình)
     }
   }
+  //-------- WATCHDOG / RESTART TC22 NẾU CẦN ---------
+  if(!targetlocked){
+    // Quá lâu k có mẫu OK -> Khởi động lại TC22 (có giới hạn)
+    bool tooLongNo_OK = (now - tc22LastOkMs > TC22_OK_TIMEOUT_MS);
+    bool canRestart = (now - tc22LastRestartMs > TC22_RESTART_INTERVAL_MS);
+    bool havingRestartsLeft = (tc22RestartCount < TC22_MAX_RESTARTS);
+
+    if(tooLongNo_OK && canRestart && havingRestartsLeft){
+      Serial.println("No MEAS_OK for a while, restarting TC22...");
+      tc22LastRestartMs = now;
+      tc22RestartCount++;
+      lrf.stop();
+      delay(500);
+      lrf.startContinuous();
+    }
+    //Sau khi restart, nếu TC22 có gửi lại đc mẫu OK thì lasOK sẽ đc cập nhật, 
+    // restartCount sẽ về 0, ko bị restart liên tục
+    if(tc22RestartCount >= TC22_MAX_RESTARTS && tooLongNo_OK){
+      // Quá nhiều lần restart mà vẫn không OK -> Báo lỗi hệ thống
+      display.setStatus(MEAS_TIMEOUT);
+      display.setSystemError(1); //Mã lỗi hệ thống 1: TC22 không phản hồi
+      display.setFPS(0.0f);
+      display.updateDistanceMeters(NAN, false); //Bắt buộc reset hệ thống từ ng dùng, sensor coi như mất kết nối
+    }
+  }
+
 #endif
 #if defined(USE_TF02_PRO)
   // ----------- FAKE DEMO (không cần TF02) -----------

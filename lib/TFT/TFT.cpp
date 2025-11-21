@@ -11,6 +11,9 @@ void TFTDistance::begin() {
   // Tính layout theo kích thước thực
   int W = tft_.width();   // 320
   int H = tft_.height();  // 240
+
+  HEADER_H_ = 65;
+
   BAR_X_ = MARGIN_;
   BAR_W_ = W - 2*MARGIN_;
   BAR_H_ = 12;
@@ -62,6 +65,18 @@ void TFTDistance::updateDistanceMeters(float m, bool valid) {
 
 void TFTDistance::setStatus(MeasStatus s) {
   status_ = s;
+  switch (s) {
+    case MEAS_OK:        measErrorCode = 0; break;
+    case MEAS_TIMEOUT:   measErrorCode = 10; break;
+    case MEAS_NO_SIGNAL:   measErrorCode = 11; break;
+    case MEAS_BAD_CRC: measErrorCode = 12; break;
+    default:           measErrorCode = 0; break;
+  }
+  drawOverlay();
+}
+
+void TFTDistance::setSystemError (uint8_t errCode) {
+  systemErrorCode = errCode; //0 nếu k lỗi
   drawOverlay();
 }
 
@@ -94,14 +109,14 @@ void TFTDistance::drawStatic() {
   tft_.drawRect(0,0,tft_.width(), HEADER_H_, C_CYAN);
   //Dòng 1
   const int TITLE_SIZE = 2;         // 16 px
-  const int TITLE_Y    = 6;
+  const int TITLE_Y    = 25;  //old:6
   tft_.setCursor(MARGIN_ + 2, TITLE_Y);
   tft_.setTextColor(C_ORANGE, C_BLACK);
   tft_.setTextSize(TITLE_SIZE);
   tft_.print("KHOANG CACH(m)");
   //Dòng 2
   const int VALUE_SIZE = 3;         // 24 px
-  const int VALUE_Y    = TITLE_Y + TITLE_SIZE*8 + 4; // 6 + 16 + 4 = 26
+  const int VALUE_Y    = TITLE_Y + TITLE_SIZE*8 + 10; // 6 + 16 + 4 = 26
   const int VALUE_H    = VALUE_SIZE*8;               // 24 px
 
   tft_.fillRect(MARGIN_, VALUE_Y - 2, tft_.width() - 2*MARGIN_, VALUE_H + 6, C_BLACK);
@@ -124,9 +139,9 @@ void TFTDistance::drawStatic() {
 //In số lớn
 void TFTDistance::printDistanceValue(const String& s, uint16_t color) {
   const int TITLE_SIZE = 2;
-  const int TITLE_Y    = 6;
+  const int TITLE_Y    = 25;
   const int VALUE_SIZE = 3;
-  const int VALUE_Y    = TITLE_Y + TITLE_SIZE*8 + 4; //ngay dưới tiêu đề
+  const int VALUE_Y    = TITLE_Y + TITLE_SIZE*8 + 10; //ngay dưới tiêu đề
   const int VALUE_H    = VALUE_SIZE*8;
   tft_.fillRect(MARGIN_, VALUE_Y - 2, tft_.width() - 2*MARGIN_, VALUE_H+6, C_BLACK);
 //tft_.fillRect(MARGIN_, 8 + (HEADER_H_ - 30)/2, tft_.width()-2*MARGIN_, 36, C_BLACK);     // xóa số cũ
@@ -163,19 +178,21 @@ void TFTDistance::paintDistanceUI() {
 void TFTDistance::drawOverlay() {
   // Khu vực nhỏ bên phải header
   const int OVER_SIZE = 1;    // chữ nhỏ
-  const int TITLE_Y   = 6;
-  int rightBlockW = 130;
-  int xRight = tft_.width() - rightBlockW - MARGIN_;
-  int yTop   = TITLE_Y - 2;
+  //const int TITLE_Y   = 6;
+  int rightBlockW = 110;
+  int xRight = tft_.width() - rightBlockW - 4/*MARGIN_*/;
+  int yFPS = 4;
+  int yStat  = yFPS + 12;
+
 
   // Xoá 2 dòng overlay
-  tft_.fillRect(xRight, yTop,            rightBlockW, 14, C_BLACK);
-  tft_.fillRect(xRight, yTop + 14,       rightBlockW, 14, C_BLACK);
+  tft_.fillRect(xRight, yFPS,        rightBlockW, 10, C_BLACK);
+  tft_.fillRect(xRight, yStat,       rightBlockW, 10, C_BLACK);
 
   // FPS (dòng trên)
   tft_.setTextSize(OVER_SIZE);
   tft_.setTextColor(C_CYAN, C_BLACK);
-  tft_.setCursor(xRight, yTop);
+  tft_.setCursor(xRight, yFPS);
   tft_.print("FPS: ");
   tft_.print(fps_, 1);
 
@@ -192,16 +209,32 @@ void TFTDistance::drawOverlay() {
 
   // Status (dòng dưới)
   tft_.setTextColor(sc, C_BLACK);
-  tft_.setCursor(xRight, yTop + 14);
+  tft_.setCursor(xRight, yStat);
   tft_.print("STAT: ");
   tft_.print(sTxt);
+
+  int yErr = yStat + 12;
+  if(measErrorCode){
+    tft_.setCursor(xRight, yErr);
+    tft_.setTextColor(C_RED, C_BLACK);
+    tft_.print("TC22-E");
+    tft_.print(measErrorCode);
+  }
+
+  int ySysErr = yErr + 12;
+  if(systemErrorCode){
+    tft_.setCursor(xRight, ySysErr);
+    tft_.setTextColor(C_RED, C_BLACK);
+    tft_.print(" SYSTEM-E");
+    tft_.print(systemErrorCode);
+  }
 }
 void TFTDistance::DrawWiFiStatus() {
   // Khoảng vùng nhỏ ở góc trên để hiển thị WiFi
-  const int16_t x = 2;
-  const int16_t y = 2;
-  const int16_t w = 200;   // rộng bao nhiêu tuỳ độ phân giải
-  const int16_t h = 12;    // cao ~1 dòng chữ size 1
+  const int16_t x = 4;
+  const int16_t y = 4;
+  const int16_t w = 150;   // rộng bao nhiêu tuỳ độ phân giải
+  const int16_t h = 10;    // cao ~1 dòng chữ size 1
 
   // Xoá vùng cũ
   tft_.fillRect(x, y, w, h, ILI9341_BLACK);

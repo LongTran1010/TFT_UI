@@ -50,6 +50,7 @@ public:
   void setStaleTimeoutMs(uint32_t ms);   // timeout ms (mặc định 1000)
 
   void setStatus(MeasStatus s);                 // vẽ/ghi nhớ trạng thái
+  void setSystemError (uint8_t errCode);        // vẽ/ghi nhớ mã lỗi hệ thống
   void setFPS(float fps);                       // vẽ/ghi nhớ FPS
   void update(const Measurement& m, float fps); // tiện ích gộp
   //update 17/10/2025
@@ -69,6 +70,8 @@ private:
   //mới
   float     fps_           = 0.0f;
   MeasStatus status_       = MEAS_TIMEOUT;
+  uint8_t   systemErrorCode   = 0;      // mã lỗi hệ thống (nếu có)
+  uint8_t   measErrorCode = 0;      // mã lỗi đo (nếu có)
   //layout động (tính theo width/height sau khi begin)
   int BAR_X_, BAR_Y_, BAR_W_, BAR_H_;
   int HEADER_H_ = 42, MARGIN_ = 10, GAP_ = 18;
